@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name             Enhanced_Media_Helper
+// @name             new_Enhanced_Media_Helper
 // @version          2.7.1
 // @description      Enhanced media downloader with multiple site support, subtitles (auto-detected & custom search via draggable button), JAV-JHS style.
 // @author           cores (original) & improved version & Gemini & JAV-JHS Style
@@ -26,7 +26,7 @@
 // @grant            GM_addValueChangeListener
 // @connect          api-shoulei-ssl.xunlei.com
 // @connect          subtitle.v.geilijiasu.com
-// @connect          cdn.jsdelivr.net  
+// @connect          cdn.jsdelivr.net
 // @license          MPL
 // @namespace        cdn.bootcss.com
 // @downloadURL      https://update.greasyfork.org/scripts/531966/Enhanced_Media_Helper.user.js
@@ -981,17 +981,7 @@ addActionButtons: (container, videoUrl, videoCode, isDetailPage = false) => { //
     }
     buttonContainer.appendChild(subtitleButton);
 
-    const codeManagerButton = document.createElement("button");
-    codeManagerButton.id = "emh-code-manager-btn";
-    codeManagerButton.className = "btn btn-info";
-    codeManagerButton.innerHTML = "<span>📋 番号库</span>";
-    codeManagerButton.title = "打开番号管理面板";
-    codeManagerButton.addEventListener('click', () => {
-        if (window.CodeManagerPanel) {
-            window.CodeManagerPanel.togglePanel();
-        }
-    });
-    buttonContainer.appendChild(codeManagerButton);
+ 
 
     container.appendChild(buttonContainer);
     return buttonContainer;
