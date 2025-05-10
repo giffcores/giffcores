@@ -2077,18 +2077,71 @@ function addCustomStyles() {
 
         // Show the panel
         showPanel: function() {
-            if (!this.panelElement) { // Ensure panel DOM is created
-                this.createPanelElement();
-            }
-            // First, ensure CODE_LIBRARY is initialized
-            if (!CODE_LIBRARY.initialized) {
-                CODE_LIBRARY.init();
-            }
+    if (!this.panelElement) { // 确保面板 DOM 元素已创建
+        this.createPanelElement();
+    }
+    if (!CODE_LIBRARY.initialized) {
+        CODE_LIBRARY.init();
+    }
 
-            this.isVisible = true;
-            this.panelElement.classList.add('visible');
-            this.refreshPanelContent(); // Load content when shown
-        },
+    this.isVisible = true;
+    this.panelElement.classList.add('visible'); // 使面板滑入视图
+    this.refreshPanelContent(); // 加载或刷新面板内容
+
+    // ---- 新增：针对 javtxt 类网站调整面板位置 ----
+    if (SITE_HANDLERS.javtxt && typeof SITE_HANDLERS.javtxt.isMatch === 'function' && SITE_HANDLERS.javtxt.isMatch()) {
+        // !!! 重要: 下面的 'nav.site-navbar' 是一个示例选择器 !!!
+        // !!! 你需要通过浏览器开发者工具检查 javtxt 网站，找到实际的导航栏元素的选择器 !!!
+        // !!! 目标是找到那个 z-index 为 12345679 !important 的导航栏元素 !!!
+        const navbarSelector = 'nav.navbar'; // <--- 【请修改为 javtxt 导航栏的实际 CSS 选择器】
+                                           // 例如可能是: 'header#main-header', '.fixed-top-bar', 'div[class*="navbar-fixed"]' 等
+
+        let navbarElement = document.querySelector(navbarSelector);
+
+        // 如果特定选择器找不到，尝试更通用的、基于已知高 z-index 的启发式查找
+        if (!navbarElement) {
+            const potentialNavs = document.querySelectorAll('nav, header'); // 常见的导航栏标签
+            for (const el of potentialNavs) {
+                const style = window.getComputedStyle(el);
+                // 检查是否固定定位在顶部且具有非常高的 z-index
+                if ((style.position === 'fixed' || style.position === 'sticky') &&
+                    parseInt(style.zIndex) >= 10000000 && // 查找具有类似超高 z-index 的元素
+                    el.getBoundingClientRect().top < 10 && // 确保它在视口顶部
+                    el.offsetHeight > 20) { // 确保它有一定高度
+                    navbarElement = el;
+                    console.log("EMH: Detected potential javtxt navbar via heuristics:", navbarElement);
+                    break;
+                }
+            }
+        }
+
+        if (navbarElement) {
+            const navbarHeight = navbarElement.offsetHeight;
+            if (navbarHeight > 0) {
+                this.panelElement.style.top = `${navbarHeight}px`;
+                this.panelElement.style.height = `calc(100vh - ${navbarHeight}px)`;
+                console.log(`EMH: Adjusted panel for javtxt navbar. Top: ${navbarHeight}px`);
+
+                // (可选) 如果面板的 z-index 之前设置得非常高以覆盖导航栏，现在可以考虑降低它
+                // this.panelElement.style.zIndex = '10050'; // 例如，一个仍然较高但低于导航栏的值
+            } else {
+                // 导航栏找到但高度为0，或不可见，则使用默认全屏
+                this.panelElement.style.top = '0px';
+                this.panelElement.style.height = '100vh';
+            }
+        } else {
+            // 未找到导航栏，使用默认全屏
+            this.panelElement.style.top = '0px';
+            this.panelElement.style.height = '100vh';
+            console.warn("EMH: javtxt navbar element not found with selector or heuristics. Panel might be obscured if navbar exists.");
+        }
+    } else {
+        // 非 javtxt 类网站，使用默认全屏
+        this.panelElement.style.top = '0px';
+        this.panelElement.style.height = '100vh';
+    }
+    // ---- 调整结束 ----
+},
 
         // Hide the panel
         hidePanel: function() {
