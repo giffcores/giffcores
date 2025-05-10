@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name             new_Enhanced_Media_Helper
+// @name             Enhanced_Media_Helper_vip
 // @version          2.7.1
 // @description      Enhanced media downloader with multiple site support, subtitles (auto-detected & custom search via draggable button), JAV-JHS style.
 // @author           cores (original) & improved version & Gemini & JAV-JHS Style
@@ -29,8 +29,6 @@
 // @connect          cdn.jsdelivr.net
 // @license          MPL
 // @namespace        cdn.bootcss.com
-// @downloadURL      https://update.greasyfork.org/scripts/531966/Enhanced_Media_Helper.user.js
-// @updateURL        https://update.greasyfork.org/scripts/531966/Enhanced_Media_Helper.meta.js
 // ==/UserScript==
 
 (function () {
@@ -334,6 +332,17 @@
             }
 
             return exportData;
+        },
+        emptyTrash: function() {
+            if (!this.initialized) this.init();
+            if (this.trash.items.length > 0) {
+                this.trash.items = []; // 清空回收站数组
+                UTILS.showToast('回收站已清空', 'success');
+                return this.save();    // 保存更改，这将触发 emh_library_updated 事件
+            } else {
+                UTILS.showToast('回收站已经是空的', 'info');
+                return false; // 没有可清空的内容
+            }
         },
 
         // 导入数据
@@ -981,7 +990,7 @@ addActionButtons: (container, videoUrl, videoCode, isDetailPage = false) => { //
     }
     buttonContainer.appendChild(subtitleButton);
 
- 
+
 
     container.appendChild(buttonContainer);
     return buttonContainer;
@@ -2231,16 +2240,69 @@ function addCustomStyles() {
 
             // Export button
             this.panelElement.querySelector('#emh-export').addEventListener('click', () => {
-                const data = CODE_LIBRARY.exportData(this.currentFilter); // Export current view or all
-                const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `emh_code_library_${this.currentFilter}_${new Date().toISOString().slice(0,10)}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-                UTILS.showToast('数据导出成功', 'success');
-            });
+            // Get currently displayed items
+            let itemsToExport = [];
+            let currentViewName = this.currentFilter; // e.g., "all", "favorite", "watched", "trash"
+
+            // 1. Get base items based on the current filter tab
+            switch(this.currentFilter) {
+                case 'favorite':
+                    itemsToExport = CODE_LIBRARY.getFavorites();
+                    break;
+                case 'watched':
+                    itemsToExport = CODE_LIBRARY.getWatched();
+                    break;
+                case 'trash':
+                    itemsToExport = CODE_LIBRARY.getTrash();
+                    break;
+                default: // 'all'
+                    itemsToExport = CODE_LIBRARY.getAll();
+                    break;
+            }
+
+            // 2. Apply search query if there is one
+            if (this.searchQuery && this.searchQuery.trim() !== "") {
+                const query = this.searchQuery.toLowerCase().trim();
+                itemsToExport = itemsToExport.filter(item =>
+                    item.code.toLowerCase().includes(query) ||
+                    (item.title && item.title.toLowerCase().includes(query)) ||
+                    (item.remarks && item.remarks.toLowerCase().includes(query))
+                );
+                currentViewName += `_searched_${this.searchQuery.replace(/\s+/g, '_')}`; // Append search term to filename
+            }
+
+            // 3. Sort items as they are displayed (optional, but good for consistency)
+            itemsToExport.sort((a, b) => new Date(b.modifiedDate) - new Date(a.modifiedDate));
+
+
+            // 4. Prepare export data object
+            const exportData = {
+                version: "1.1", // Updated version to reflect new export logic
+                exportDate: new Date().toISOString(),
+                filter: this.currentFilter, // Original filter tab
+                searchQuery: this.searchQuery, // Applied search query
+                itemCount: itemsToExport.length,
+                items: itemsToExport // The actual filtered and searched items
+            };
+
+            if (itemsToExport.length === 0) {
+                UTILS.showToast('当前列表为空，无需导出', 'info');
+                return;
+            }
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            // Sanitize currentViewName for filename
+            const sanitizedViewName = currentViewName.replace(/[^a-z0-9_.-]/gi, '_');
+            a.download = `emh_code_library_${sanitizedViewName}_${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(a); // Required for Firefox
+            a.click();
+            document.body.removeChild(a); // Clean up
+            URL.revokeObjectURL(url);
+            UTILS.showToast(`成功导出 ${itemsToExport.length} 个当前列表中的项目`, 'success');
+        });
 
             // Import button
             this.panelElement.querySelector('#emh-import').addEventListener('click', () => {
