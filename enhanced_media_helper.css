@@ -1151,7 +1151,7 @@ div.tabs.no-bottom,
     height: 100vh;
     background: white;
     box-shadow: -5px 0 15px rgba(0, 0, 0, 0.2);
-    z-index: 10010;
+    z-index: 12345680; 
     transition: right 0.3s ease;
     display: flex;
     flex-direction: column;
