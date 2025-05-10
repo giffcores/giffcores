@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name             Enhanced_Media_Helper
-// @version          2.7
+// @version          2.7.1
 // @description      Enhanced media downloader with multiple site support, subtitles (auto-detected & custom search via draggable button), JAV-JHS style.
 // @author           cores (original) & improved version & Gemini & JAV-JHS Style
 // @match            https://jable.tv/videos/*/*
@@ -18,16 +18,15 @@
 // @include          /.*javtext.[a-z]+\/v/.*$/
 // @match            https://cableav.tv/?p=*
 // @require          https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js
-// @resource         EMH_CSS enhanced_media_helper.css
 // @icon             data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @grant            GM_xmlhttpRequest
 // @grant            GM_setValue
 // @grant            GM_getValue
 // @grant            GM_addStyle
-// @grant            GM_getResourceText
 // @grant            GM_addValueChangeListener
 // @connect          api-shoulei-ssl.xunlei.com
 // @connect          subtitle.v.geilijiasu.com
+// @connect          cdn.jsdelivr.net  
 // @license          MPL
 // @namespace        cdn.bootcss.com
 // @downloadURL      https://update.greasyfork.org/scripts/531966/Enhanced_Media_Helper.user.js
@@ -926,75 +925,77 @@
             }
         },
 
-        addActionButtons: (container, videoUrl, videoCode) => {
-            const buttonContainer = document.createElement("div");
-            buttonContainer.className = "emh-action-buttons"; // Class for styling
+        // In UTILS object, replace the existing addActionButtons:
+addActionButtons: (container, videoUrl, videoCode, isDetailPage = false) => { // Added isDetailPage parameter
+    const buttonContainer = document.createElement("div");
+    buttonContainer.className = "emh-action-buttons";
 
-            // Add code status indicator if we have a valid code
-            if (videoCode) {
-                createCodeStatusIndicator(buttonContainer, videoCode);
+    if (videoCode) {
+        // The status indicator is now the first element in the button container
+        // It will be created and prepended here.
+        createCodeStatusIndicator(buttonContainer, videoCode); // Pass buttonContainer as parent
 
-                 // Auto-add to library if enabled
-                if (CONFIG.codeManager.autoAddDetected && CODE_LIBRARY.initialized) {
-                    const existingItem = CODE_LIBRARY.getItem(videoCode);
-                    if (!existingItem) {
-                        // Get title from page if possible
-                        let title = '';
-                        const titleElement = document.querySelector("h4.title, h1.post-title, .video-info h4, meta[property='og:title']");
-                        if (titleElement) {
-                            title = titleElement.content || titleElement.innerText.trim();
-                            // Attempt to clean up title if it contains the video code
-                            if (title.includes(videoCode)) {
-                                title = title.split(videoCode).pop().trim().replace(/^[-–—\s]+/, '');
-                            }
-                        }
-                        // Add to library with "unmarked" status
-                        CODE_LIBRARY.markItem(videoCode, 'unmarked', title);
+        // Auto-add to library if enabled AND on a detail page
+        if (isDetailPage && CONFIG.codeManager.autoAddDetected && CODE_LIBRARY.initialized) {
+            const existingItem = CODE_LIBRARY.getItem(videoCode);
+            if (!existingItem) {
+                let title = '';
+                const titleElement = document.querySelector("h4.title, h1.post-title, .video-info h4, meta[property='og:title']");
+                if (titleElement) {
+                    title = titleElement.content || titleElement.innerText.trim();
+                    if (title.includes(videoCode)) {
+                        title = title.split(videoCode).pop().trim().replace(/^[-–—\s]+/, '');
                     }
                 }
+                CODE_LIBRARY.markItem(videoCode, 'unmarked', title);
+                // console.log(`EMH: Auto-added ${videoCode} to library because it's a detail page.`);
             }
+        }
+    }
 
+    const copyButton = document.createElement("button");
+    copyButton.id = "emh-copyLink";
+    copyButton.className = "btn btn-primary";
+    copyButton.innerHTML = "<span>📋 复制链接</span>";
+    copyButton.title = videoUrl || "无有效视频链接";
+    copyButton.dataset.videoUrl = videoUrl || '';
+    buttonContainer.appendChild(copyButton);
 
-            const copyButton = document.createElement("button");
-            copyButton.id = "emh-copyLink";
-            copyButton.className = "btn btn-primary"; // JAV-JHS style
-            copyButton.innerHTML = "<span>📋 复制链接</span>";
-            copyButton.title = videoUrl || "无有效视频链接";
-            copyButton.dataset.videoUrl = videoUrl || ''; // Store URL in data attribute
-            buttonContainer.appendChild(copyButton);
+    const sendButton = document.createElement("button");
+    sendButton.id = "emh-sendData";
+    sendButton.className = "btn btn-danger";
+    sendButton.innerHTML = "<span>💾 发送到服务器</span>";
+    sendButton.dataset.videoUrl = videoUrl || '';
+    sendButton.dataset.videoCode = videoCode || '';
+    buttonContainer.appendChild(sendButton);
 
-            const sendButton = document.createElement("button");
-            sendButton.id = "emh-sendData";
-            sendButton.className = "btn btn-danger"; // JAV-JHS style
-            sendButton.innerHTML = "<span>💾 发送到服务器</span>";
-            sendButton.dataset.videoUrl = videoUrl || '';
-            sendButton.dataset.videoCode = videoCode || '';
-            buttonContainer.appendChild(sendButton);
+    const subtitleButton = document.createElement("button");
+    subtitleButton.id = "emh-getSubtitles";
+    subtitleButton.className = "btn btn-success";
+    subtitleButton.innerHTML = "<span>📄 获取字幕</span>";
+    subtitleButton.dataset.videoCode = videoCode || '';
+    if (!videoCode) { // Disable if no code
+        subtitleButton.disabled = true;
+        subtitleButton.classList.add('btn-disabled');
+        subtitleButton.title = "无番号，无法获取字幕";
+    }
+    buttonContainer.appendChild(subtitleButton);
 
-            const subtitleButton = document.createElement("button");
-            subtitleButton.id = "emh-getSubtitles"; // This is for auto-detected code
-            subtitleButton.className = "btn btn-success"; // JAV-JHS style
-            subtitleButton.innerHTML = "<span>📄 获取字幕</span>";
-            subtitleButton.dataset.videoCode = videoCode || '';
-            buttonContainer.appendChild(subtitleButton);
+    const codeManagerButton = document.createElement("button");
+    codeManagerButton.id = "emh-code-manager-btn";
+    codeManagerButton.className = "btn btn-info";
+    codeManagerButton.innerHTML = "<span>📋 番号库</span>";
+    codeManagerButton.title = "打开番号管理面板";
+    codeManagerButton.addEventListener('click', () => {
+        if (window.CodeManagerPanel) {
+            window.CodeManagerPanel.togglePanel();
+        }
+    });
+    buttonContainer.appendChild(codeManagerButton);
 
-            // Add code manager button
-            const codeManagerButton = document.createElement("button");
-            codeManagerButton.id = "emh-code-manager-btn";
-            codeManagerButton.className = "btn btn-info"; // JAV-JHS style
-            codeManagerButton.innerHTML = "<span>📋 番号库</span>";
-            codeManagerButton.title = "打开番号管理面板";
-            codeManagerButton.addEventListener('click', () => {
-                if (window.CodeManagerPanel) {
-                    window.CodeManagerPanel.togglePanel();
-                }
-            });
-            buttonContainer.appendChild(codeManagerButton);
-
-
-            container.appendChild(buttonContainer);
-            return buttonContainer;
-        },
+    container.appendChild(buttonContainer);
+    return buttonContainer;
+},
 
         // 注意：下面的字幕相关函数已移至SUBTITLE_MANAGER模块，保留API兼容性
         createSubtitleModal: (subtitleContent, videoCode) => {
@@ -1552,101 +1553,111 @@
             isMatch: () => UTILS.getDomain().includes('jable') || UTILS.getDomain().includes('cableav') || UTILS.getDomain().includes('fs1.app'),
             targetSelector: '.video-toolbar, .video-info .level, .video-info .row, .text-center, #detail-container .pb-3, .container .mt-4, .player-container + div', // More robust selectors
             process: (targetElement) => {
-                 if (!targetElement) {
-                    console.error("Jable-like: Target container not found or page structure mismatch.");
-                    return;
-                }
-                // Prevent adding buttons multiple times if script re-runs or target is too general
-                if (targetElement.querySelector('.emh-ui-container') || document.querySelector('.emh-ui-container')) {
-                    // console.log("EMH: UI container already exists on Jable-like page.");
-                    return;
-                }
+    if (!targetElement) {
+        console.error("Jable-like: Target container not found or page structure mismatch for EMH UI.");
+        return;
+    }
+    // Prevent adding buttons multiple times
+    if (targetElement.querySelector('.emh-ui-container') || document.querySelector('.emh-ui-container#emh-jable-main-ui')) {
+        // console.log("EMH: UI container already exists on Jable-like page.");
+        return;
+    }
 
-                const isCableAv = UTILS.getDomain() === "cableav.tv";
-                let videoUrl = '';
-                let videoCode = UTILS.getCodeFromUrl(window.location.href);
+    const isCableAv = UTILS.getDomain().includes('cableav.tv');
+    const isFs1App = UTILS.getDomain().includes('fs1.app');
+    const currentPath = window.location.pathname;
+    let videoUrl = '';
+    let videoCode = null; // Initialize videoCode to null
+    let isDetailPage = false;
 
-                if (!videoCode) { // Try getting from title if not in URL
-                    const titleCodeMatch = document.title.match(/^([A-Z0-9-]+)/i);
-                    if (titleCodeMatch) videoCode = titleCodeMatch[1].toUpperCase();
-                }
-                 if (!videoCode) { // Try from og:title as a further fallback
-                    const ogTitle = document.querySelector("meta[property='og:title']");
-                    if (ogTitle && ogTitle.content) {
-                        const titleMatch = ogTitle.content.match(/^([A-Z0-9-]+)/i);
-                        if (titleMatch) videoCode = titleMatch[1].toUpperCase();
-                    }
-                }
-
-
-                if (!isCableAv) { // For Jable and fs1.app
-                    if (typeof hlsUrl !== 'undefined' && hlsUrl) { // Check global hlsUrl variable
-                        videoUrl = hlsUrl;
-                    } else { // Fallback to searching script tags
-                        const scripts = document.querySelectorAll('script');
-                        for (let script of scripts) {
-                            if (script.textContent.includes('player.src({')) { // Common pattern for Jable player
-                                const match = script.textContent.match(/src:\s*['"]([^'"]+\.m3u8[^'"]*)['"]/);
-                                if (match && match[1]) {
-                                    videoUrl = match[1];
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    if (videoUrl && videoCode) {
-                        videoUrl += "#" + videoCode; // Append code to URL for identification by server
-                    } else if (videoUrl && !videoCode) {
-                         // If videoUrl exists but no code, try to extract code from videoUrl if possible
-                         // This is a common pattern for some sites where code is part of the m3u8 path
-                        const urlCodeMatch = videoUrl.match(/\/([A-Z0-9-]+)\//i);
-                        if (urlCodeMatch && urlCodeMatch[1]) {
-                            videoCode = urlCodeMatch[1].toUpperCase();
-                            videoUrl += "#" + videoCode;
-                        } else if (videoCode) { // If code was found elsewhere but not in URL
-                            videoUrl += "#" + videoCode;
-                        }
-                    }
-                } else { // For CableAV
-                    const metaTag = document.head.querySelector("meta[property~='og:video:url'][content]");
-                    if (metaTag) videoUrl = metaTag.content;
-                }
-
-                if (videoCode) {
-                    updateGlobalVideoCode(videoCode);
-                } else {
-                    console.warn("Jable-like: Video code could not be determined for this page.");
-                }
-
-                const uiContainer = document.createElement("div");
-                uiContainer.className = "emh-ui-container";
-
-                if (videoCode) {
-                    const dataElement = document.createElement("span");
-                    dataElement.id = "emh-dataElement";
-                    dataElement.className = "btn btn-outline"; // JAV-JHS Style
-                    dataElement.style.cursor = 'pointer';
-                    dataElement.innerHTML = `番号: ${videoCode}`;
-                    dataElement.title = "点击搜索番号 (1cili)";
-                    dataElement.dataset.videoCode = videoCode;
-
-                     // 创建状态指示器容器
-                    const statusContainer = document.createElement('div');
-                    statusContainer.className = 'emh-code-status-container';
-                    statusContainer.style.display = 'inline-block';
-                    statusContainer.style.marginLeft = '10px';
-                    createCodeStatusIndicator(statusContainer, videoCode);
-
-                    // 将状态指示器添加到番号文本后面
-                    dataElement.appendChild(statusContainer);
-
-                    uiContainer.appendChild(dataElement);
-                }
-
-                UTILS.addActionButtons(uiContainer, videoUrl, videoCode);
-                targetElement.appendChild(uiContainer);
-                console.log("EMH: Added UI buttons to Jable-like page via target:", targetElement);
+    // Determine if it's a detail page and try to extract videoCode
+    if ( (UTILS.getDomain().includes('jable.tv') || isFs1App) && currentPath.startsWith('/videos/') ) {
+        const parts = currentPath.split('/').filter(Boolean);
+        if (parts.length >= 2 && parts[0] === 'videos') {
+            // For Jable/Fs1, code is usually parts[1] or parts[2] if there's a language part
+            // e.g., /videos/language/code/ or /videos/code/
+            // A more robust extraction for these sites:
+            const potentialCode = parts[parts.length -1] || parts[parts.length-2];
+            if (potentialCode && potentialCode.match(/^([A-Z0-9]+(?:-[A-Z0-9]+)*)$/i)) {
+                 videoCode = UTILS.getCodeFromUrl(window.location.href); // Use the more general URL parser
             }
+            if (videoCode) isDetailPage = true;
+        }
+    } else if (isCableAv && currentPath !== '/' && !currentPath.startsWith('/?p=')) {
+        // For cableav, a path like /CODE/ is a detail page
+        videoCode = UTILS.getCodeFromUrl(window.location.href);
+        if (videoCode) isDetailPage = true;
+    }
+
+    // If it's determined to be a detail page, try more methods to get the code if still null
+    if (isDetailPage && !videoCode) {
+        const titleCodeMatch = document.title.match(/^([A-Z0-9-]+)/i);
+        if (titleCodeMatch) videoCode = titleCodeMatch[1].toUpperCase();
+    }
+    if (isDetailPage && !videoCode) {
+        const ogTitle = document.querySelector("meta[property='og:title']");
+        if (ogTitle && ogTitle.content) {
+            const titleMatch = ogTitle.content.match(/^([A-Z0-9-]+)/i);
+            if (titleMatch) videoCode = titleMatch[1].toUpperCase();
+        }
+    }
+
+    // Video URL extraction (primarily for detail pages)
+    if (isDetailPage && videoCode) {
+        if (!isCableAv) {
+            if (typeof hlsUrl !== 'undefined' && hlsUrl) {
+                videoUrl = hlsUrl;
+            } else {
+                const scripts = document.querySelectorAll('script');
+                for (let script of scripts) {
+                    if (script.textContent.includes('player.src({')) {
+                        const match = script.textContent.match(/src:\s*['"]([^'"]+\.m3u8[^'"]*)['"]/);
+                        if (match && match[1]) {
+                            videoUrl = match[1];
+                            break;
+                        }
+                    }
+                }
+            }
+            if (videoUrl) { // Append code only if videoUrl was found
+                videoUrl += "#" + videoCode;
+            }
+        } else { // CableAV
+            const metaTag = document.head.querySelector("meta[property~='og:video:url'][content]");
+            if (metaTag) videoUrl = metaTag.content;
+        }
+    }
+
+    if (videoCode) { // If a code was determined (likely only on detail pages now)
+        updateGlobalVideoCode(videoCode);
+    } else if (isDetailPage) { // If it's a detail page but we couldn't find a code
+        console.warn("Jable-like: Video code could not be determined for this detail page by EMH.");
+    }
+
+
+    const uiContainer = document.createElement("div");
+    uiContainer.className = "emh-ui-container";
+    uiContainer.id = "emh-jable-main-ui"; // Add an ID to make the check more specific
+
+    // Only add the "番号: CODE" display element if a videoCode is found (typically on detail pages)
+    if (videoCode && isDetailPage) { // Ensure it's a detail page for this element too
+        const dataElement = document.createElement("span");
+        dataElement.id = "emh-dataElement";
+        dataElement.className = "btn btn-outline";
+        dataElement.style.cursor = 'pointer';
+        dataElement.innerHTML = `番号: ${videoCode}`; // No separate status indicator here
+        dataElement.title = "点击搜索番号 (1cili)";
+        dataElement.dataset.videoCode = videoCode;
+        uiContainer.appendChild(dataElement);
+    }
+
+    // Pass isDetailPage flag to addActionButtons.
+    // videoCode might be null here if not a detail page or code not found.
+    // addActionButtons handles the indicator and auto-add based on videoCode and isDetailPage.
+    UTILS.addActionButtons(uiContainer, videoUrl, videoCode, isDetailPage);
+    targetElement.appendChild(uiContainer);
+    // console.log(`EMH: Added UI to Jable-like. Target:`, targetElement, `isDetailPage: ${isDetailPage}, Code: ${videoCode}`);
+}
         }
     };
 
@@ -1873,89 +1884,116 @@
 
     }
 
-    function addCustomStyles() {
-        // This function is now primarily for loading CSS via GM_addStyle if GM_getResourceText is used
-        // Or it can be removed if CSS is directly linked in @resource and handled by browser
-        const cssText = GM_getResourceText("EMH_CSS");
-        if (cssText) {
-            GM_addStyle(cssText);
+function addCustomStyles() {
+        const cssUrl = "https://cdn.jsdelivr.net/gh/giffcores/giffcores@main/enhanced_media_helper.css";
+        // 获取当前时间戳作为查询参数，以尝试绕过CDN缓存（用于开发/测试）
+        // 对于生产环境，你可能不需要 '?v=' + Date.now()，除非你希望每次加载都获取最新版本
+        const cssUrlWithCacheBuster = cssUrl + '?v=' + Date.now();
+
+
+        if (typeof GM_xmlhttpRequest !== "undefined") {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: cssUrlWithCacheBuster, // 使用带有缓存破坏参数的URL
+                onload: function(response) {
+                    if (response.status >= 200 && response.status < 300) {
+                        GM_addStyle(response.responseText);
+                        console.log("EMH: CSS loaded successfully from CDN.");
+                    } else {
+                        console.error(`EMH: Failed to load CSS from CDN. Status: ${response.status}`);
+                        fallbackLoadCss(); // 尝试备用加载或提示错误
+                    }
+                },
+                onerror: function(error) {
+                    console.error("EMH: Error loading CSS from CDN:", error);
+                    fallbackLoadCss(); // 尝试备用加载或提示错误
+                },
+                ontimeout: function() {
+                    console.error("EMH: Timeout loading CSS from CDN.");
+                    fallbackLoadCss();
+                }
+            });
         } else {
-            console.warn("EMH: Could not load CSS from @resource. Styles might be missing.");
-            // Fallback: include minimal essential styles directly if GM_getResourceText fails
-            // This is not ideal as it duplicates CSS but can be a last resort.
-            // For this refactor, we assume GM_getResourceText works.
-        }
-    }
-     // 创建番号状态标记按钮
-    function createCodeStatusIndicator(container, code) {
-        if (!code || !container) return null;
-
-        // 初始化 CODE_LIBRARY
-        if (!CODE_LIBRARY.initialized) {
-            CODE_LIBRARY.init();
-        }
-
-        // 获取当前番号状态
-        const currentStatus = CODE_LIBRARY.getStatus(code);
-
-        // 创建状态指示器
-        const statusIndicator = document.createElement('div');
-        statusIndicator.className = 'emh-code-status-indicator';
-        statusIndicator.dataset.code = code;
-        statusIndicator.dataset.status = currentStatus; // Store current status
-
-        // 设置状态图标和颜色 (styles are in CSS)
-        const statusColors = CONFIG.codeManager.statusColors;
-        statusIndicator.style.backgroundColor = statusColors[currentStatus] || statusColors.unmarked;
-
-
-        // 状态提示文本
-        let statusText = '未标记';
-        if (currentStatus === 'favorite') statusText = '已关注';
-        if (currentStatus === 'watched') statusText = '已看过';
-
-        // 根据状态设置不同的提示文本
-        if (currentStatus === 'watched') {
-            statusIndicator.title = `状态: ${statusText} (请在番号库中修改状态)`;
-            statusIndicator.style.cursor = 'default'; // 已看状态下不可点击
-        } else {
-            statusIndicator.title = `状态: ${statusText} (点击${currentStatus === 'favorite' ? '取消' : ''}关注)`;
-            statusIndicator.style.cursor = 'pointer'; // 可点击状态
-        }
-
-
-        // 点击事件 - 只能切换关注状态
-        statusIndicator.addEventListener('click', (e) => {
-            e.preventDefault(); // Prevent any default action if it's inside a link
-            e.stopPropagation(); // Stop event from bubbling up
-
-            // 获取最新的当前状态
-            const currentStatus = CODE_LIBRARY.getStatus(code);
-
-            // 如果是已看状态，不允许修改
-            if (currentStatus === 'watched') {
-                UTILS.showToast('已看状态请在番号库中修改', 'warning');
-                return;
+            console.warn("EMH: GM_xmlhttpRequest is not available. Cannot load CSS from CDN dynamically.");
+            // 作为最后的手段，可以尝试使用 <link> 标签，但这在用户脚本中不总是可靠或被允许
+            try {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.type = 'text/css';
+                link.href = cssUrl; // 不带缓存破坏参数，依赖浏览器缓存
+                document.head.appendChild(link);
+                 console.log("EMH: Attempting to load CSS via <link> tag as fallback.");
+            } catch (e) {
+                console.error("EMH: Fallback CSS load via <link> tag failed.", e);
             }
-
-            // 在未标记和关注之间切换
-            const newStatus = currentStatus === 'favorite' ? 'unmarked' : 'favorite';
-
-            // 更新标记
-            CODE_LIBRARY.markItem(code, newStatus); // This will save and trigger 'emh_library_updated'
-
-            // 更新UI (will be handled by 'emh_library_updated' listener)
-            // updateCodeStatusIndicators(); // No longer directly called here
-
-            // 显示提示
-            const statusText = newStatus === 'favorite' ? '已关注' : '已取消关注';
-            UTILS.showToast(`番号 ${code} ${statusText}`, 'success');
-        });
-
-        // 添加到容器
-        container.appendChild(statusIndicator);
-        return statusIndicator;
+        }
     }
+
+    // 可选的备用函数，如果CDN加载失败
+    function fallbackLoadCss() {
+        // 你可以在这里实现一个备用逻辑，比如：
+        // 1. 尝试从另一个CDN加载
+        // 2. 如果之前有将CSS内嵌在脚本中的版本，可以临时注入那个版本的CSS
+        // 3. 或者简单地显示一个错误提示给用户
+        UTILS.showToast("无法加载脚本样式，部分界面可能显示不正确。", "error");
+        // 例如，如果你有一个内嵌的极简CSS作为备用：
+        // const minimalFallbackCSS = `
+        // .emh-modal { display: none !important; } /* 隐藏主要组件以避免无样式混乱 */
+        // #custom-toast-container { display: block !important; } /* 确保toast可见 */
+        // /* ...其他必要的最小化样式... */
+        // `;
+        // GM_addStyle(minimalFallbackCSS);
+    }
+    function createCodeStatusIndicator(container, code) {
+    if (!code || !container) return null;
+
+    if (!CODE_LIBRARY.initialized) {
+        CODE_LIBRARY.init();
+    }
+
+    const currentStatus = CODE_LIBRARY.getStatus(code);
+    const statusIndicator = document.createElement('div');
+    statusIndicator.className = 'emh-code-status-indicator';
+    statusIndicator.dataset.code = code;
+    statusIndicator.dataset.status = currentStatus;
+
+    const statusColors = CONFIG.codeManager.statusColors;
+    statusIndicator.style.backgroundColor = statusColors[currentStatus] || statusColors.unmarked;
+
+    let statusText = '未标记';
+    if (currentStatus === 'favorite') statusText = '已关注';
+    if (currentStatus === 'watched') statusText = '已看过';
+
+    if (currentStatus === 'watched') {
+        statusIndicator.title = `状态: ${statusText} (请在番号库中修改状态)`;
+        statusIndicator.style.cursor = 'default';
+    } else {
+        statusIndicator.title = `状态: ${statusText} (点击${currentStatus === 'favorite' ? '取消' : ''}关注)`;
+        statusIndicator.style.cursor = 'pointer';
+    }
+
+    statusIndicator.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const latestStatus = CODE_LIBRARY.getStatus(code); // Get fresh status
+        if (latestStatus === 'watched') {
+            UTILS.showToast('已看状态请在番号库中修改', 'warning');
+            return;
+        }
+        const newStatus = latestStatus === 'favorite' ? 'unmarked' : 'favorite';
+        CODE_LIBRARY.markItem(code, newStatus); // This will save and trigger 'emh_library_updated'
+        const newStatusText = newStatus === 'favorite' ? '已关注' : '已取消关注'; // Corrected for display
+        UTILS.showToast(`番号 ${code} ${newStatusText}`, 'success');
+    });
+
+    // Prepend the indicator to its container so it appears first
+    if (container.firstChild) {
+        container.insertBefore(statusIndicator, container.firstChild);
+    } else {
+        container.appendChild(statusIndicator);
+    }
+    return statusIndicator;
+}
 
     // 更新所有番号状态指示器
     function updateCodeStatusIndicators() {
